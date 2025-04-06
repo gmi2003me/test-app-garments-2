@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Garment Management</title>
+    <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        h1 { color: #444; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        label { display: block; margin-top: 10px; margin-bottom: 5px; font-weight: bold; }
+        select, textarea, input[type="text"] { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+        textarea { resize: vertical; min-height: 60px; }
+        button { padding: 10px 15px; margin: 5px 5px 5px 0; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background-color 0.2s ease; }
+        button#addButton { background-color: #28a745; color: white; }
+        button#addButton:hover { background-color: #218838; }
+        button#updateButton { background-color: #007bff; color: white; }
+        button#updateButton:hover { background-color: #0056b3; }
+        button#cancelButton { background-color: #6c757d; color: white; }
+        button#cancelButton:hover { background-color: #5a6268; }
+        button.edit-btn { background-color: #ffc107; color: #333; }
+        button.edit-btn:hover { background-color: #e0a800; }
+        button.delete-btn { background-color: #dc3545; color: white; }
+        button.delete-btn:hover { background-color: #c82333; }
+        table { margin-top: 30px; border-collapse: collapse; width: 100%; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #e9ecef; color: #495057; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        .error { color: red; margin-top: 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Garment Management</h1>
+        <div id="errorMessage" class="error"></div>
+
+        <input type="hidden" id="garmentId">
+
+        <div>
+            <label for="garmentType">Type:</label>
+            <select id="garmentType" required></select>
+        </div>
+
+        <div>
+            <label for="garmentColor">Color:</label>
+            <select id="garmentColor" required></select>
+        </div>
+
+        <div>
+            <label for="garmentDescription">Description:</label>
+            <textarea id="garmentDescription" placeholder="Enter description" required></textarea>
+        </div>
+
+        <button id="addButton">Add Garment</button>
+        <button id="updateButton" class="hidden">Update Garment</button>
+        <button id="cancelButton" class="hidden">Cancel</button>
+    </div>
+
+    <table id="garmentTable">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Color</th>
+                <th>Description</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="garmentTableBody">
+            <!-- Garment rows will be inserted here -->
+        </tbody>
+    </table>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const garmentTypeSelect = document.getElementById('garmentType');
+        const garmentColorSelect = document.getElementById('garmentColor');
+        const garmentDescriptionInput = document.getElementById('garmentDescription');
+        const garmentTableBody = document.getElementById('garmentTableBody');
+        const addButton = document.getElementById('addButton');
+        const updateButton = document.getElementById('updateButton');
+        const cancelButton = document.getElementById('cancelButton');
+        const garmentIdInput = document.getElementById('garmentId');
+        const errorMessageDiv = document.getElementById('errorMessage');
+
+        let supabase;
+        let garmentTypes = [];
+        let garmentColors = [];
+
+        async function fetchSupabaseConfig() {
+            try {
+                const response = await fetch('/api/supabase');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error("Error fetching Supabase config:", error);
+                showError("Could not fetch configuration. Please ensure the API endpoint is correct and the server is running.");
+                return null;
+            }
+        }
+
+        async function initializeSupabase() {
+            const config = await fetchSupabaseConfig();
+            if (config && config.supabaseUrl && config.supabaseAnonKey) {
+                supabase = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                await loadInitialData();
+            } else {
+                 showError("Supabase URL or Anon Key is missing. Check environment variables and API endpoint.");
+            }
+        }
+
+        function showError(message) {
+             errorMessageDiv.textContent = message;
+             errorMessageDiv.style.display = 'block';
+             console.error(message);
+        }
+
+        function clearError() {
+            errorMessageDiv.textContent = '';
+            errorMessageDiv.style.display = 'none';
+        }
+
+        async function fetchTypes() {
+            clearError();
+            const { data, error } = await supabase.from('garment_types').select('*').order('name');
+            if (error) {
+                showError(`Error fetching garment types: ${error.message}`);
+                return;
+            }
+            garmentTypes = data;
+            garmentTypeSelect.innerHTML = '<option value="">Select Type</option>'; // Placeholder
+            garmentTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type.id;
+                option.textContent = type.name;
+                garmentTypeSelect.appendChild(option);
+            });
+        }
+
+        async function fetchColors() {
+            clearError();
+            const { data, error } = await supabase.from('colors').select('*').order('name');
+            if (error) {
+                showError(`Error fetching colors: ${error.message}`);
+                return;
+            }
+            garmentColors = data;
+            garmentColorSelect.innerHTML = '<option value="">Select Color</option>'; // Placeholder
+            garmentColors.forEach(color => {
+                const option = document.createElement('option');
+                option.value = color.id;
+                option.textContent = color.name;
+                garmentColorSelect.appendChild(option);
+            });
+        }
+
+        async function fetchGarments() {
+            clearError();
+             // Ensure types and colors are loaded before fetching garments that reference them
+            if (garmentTypes.length === 0 || garmentColors.length === 0) {
+                console.log("Waiting for types and colors to load...");
+                // Optionally add a small delay or a more robust check
+                // For simplicity, we rely on the sequential execution in loadInitialData
+                return;
+            }
+
+            const { data: garments, error } = await supabase
+                .from('garments')
+                .select('*, garment_types(name), colors(name)') // Join with related tables
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                showError(`Error fetching garments: ${error.message}`);
+                return;
+            }
+
+            garmentTableBody.innerHTML = ''; // Clear existing rows
+            if (garments && garments.length > 0) {
+                garments.forEach(garment => {
+                    // Handle potential null relations if data is inconsistent
+                    const typeName = garment.garment_types ? garment.garment_types.name : 'N/A';
+                    const colorName = garment.colors ? garment.colors.name : 'N/A';
+
+                    const row = `
+                        <tr data-id="${garment.id}">
+                            <td>${typeName}</td>
+                            <td>${colorName}</td>
+                            <td>${garment.description || ''}</td>
+                            <td>
+                                <button class="edit-btn" onclick="editGarment('${garment.id}', '${garment.type_id}', '${garment.color_id}', \`${garment.description || ''}\`)">Edit</button>
+                                <button class="delete-btn" onclick="deleteGarment(${garment.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    garmentTableBody.innerHTML += row;
+                });
+            } else {
+                 garmentTableBody.innerHTML = '<tr><td colspan="4">No garments found.</td></tr>';
+            }
+        }
+
+         async function addGarment() {
+             clearError();
+             const typeId = garmentTypeSelect.value;
+             const colorId = garmentColorSelect.value;
+             const description = garmentDescriptionInput.value.trim();
+
+             if (!typeId || !colorId || !description) {
+                 showError('Please select a type, color, and enter a description.');
+                 return;
+             }
+
+             const { data, error } = await supabase
+                 .from('garments')
+                 .insert([{ type_id: typeId, color_id: colorId, description: description }]);
+
+             if (error) {
+                 showError(`Error adding garment: ${error.message}`);
+             } else {
+                 console.log('Garment added:', data);
+                 resetForm();
+                 await fetchGarments(); // Refresh the table
+             }
+         }
+
+        function editGarment(id, typeId, colorId, description) {
+            clearError();
+            garmentIdInput.value = id;
+            garmentTypeSelect.value = typeId;
+            garmentColorSelect.value = colorId;
+            garmentDescriptionInput.value = description;
+
+            addButton.classList.add('hidden');
+            updateButton.classList.remove('hidden');
+            cancelButton.classList.remove('hidden');
+            window.scrollTo(0, 0); // Scroll to top to see the form
+        }
+
+         async function updateGarment() {
+             clearError();
+             const id = garmentIdInput.value;
+             const typeId = garmentTypeSelect.value;
+             const colorId = garmentColorSelect.value;
+             const description = garmentDescriptionInput.value.trim();
+
+             if (!id || !typeId || !colorId || !description) {
+                 showError('Please ensure all fields are filled correctly.');
+                 return;
+             }
+
+             const { data, error } = await supabase
+                 .from('garments')
+                 .update({ type_id: typeId, color_id: colorId, description: description })
+                 .match({ id: id });
+
+             if (error) {
+                 showError(`Error updating garment: ${error.message}`);
+             } else {
+                 console.log('Garment updated:', data);
+                 resetForm();
+                 await fetchGarments(); // Refresh the table
+             }
+         }
+
+        function resetForm() {
+            clearError();
+            garmentIdInput.value = '';
+            garmentTypeSelect.value = '';
+            garmentColorSelect.value = '';
+            garmentDescriptionInput.value = '';
+
+            addButton.classList.remove('hidden');
+            updateButton.classList.add('hidden');
+            cancelButton.classList.add('hidden');
+        }
+
+        async function deleteGarment(id) {
+            clearError();
+            if (!confirm('Are you sure you want to delete this garment?')) {
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('garments')
+                .delete()
+                .match({ id: id });
+
+            if (error) {
+                showError(`Error deleting garment: ${error.message}`);
+            } else {
+                console.log('Garment deleted:', data);
+                resetForm(); // Reset form in case the deleted item was being edited
+                await fetchGarments(); // Refresh the table
+            }
+        }
+
+        // Load initial data and set up event listeners
+        async function loadInitialData() {
+            await fetchTypes(); // Load types first
+            await fetchColors(); // Then colors
+            await fetchGarments(); // Finally garments
+
+            // Setup event listeners only after Supabase is initialized and initial data is potentially loaded
+             addButton.onclick = addGarment;
+             updateButton.onclick = updateGarment;
+             cancelButton.onclick = resetForm;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeSupabase);
+
+    </script>
+</body>
+</html> 

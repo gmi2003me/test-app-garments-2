@@ -1,0 +1,12 @@
+# Environment variables
+.env*.local
+
+# Vercel build output
+.vercel
+
+# Node modules (if you decide to add any build steps later)
+node_modules/
+
+# OS-specific files
+.DS_Store
+*.pem 
