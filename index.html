@@ -104,7 +104,7 @@
         async function initializeSupabase() {
             const config = await fetchSupabaseConfig();
             if (config && config.supabaseUrl && config.supabaseAnonKey) {
-                supabase = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
                 await loadInitialData();
             } else {
                  showError("Supabase URL or Anon Key is missing. Check environment variables and API endpoint.");
